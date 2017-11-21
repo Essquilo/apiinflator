@@ -31,9 +31,6 @@ enum RequestType {
 
 enum Authentication {SESSION, OAUTH}
 
-enum JsonResponse {GSON, JACKSON}
-
-enum ResponseParsing {RAWRESPONSE, JSONRESPONSE, XMLRESPONSE}
 
 enum ParametersEncoding {FORM, PLAINJSON}
 
@@ -45,9 +42,7 @@ public class MethodCreator {
     private RequestType requestType = RequestType.GET;
     private Authentication authentication;
     private String sessionId;
-    private ResponseParsing responseParsing = ResponseParsing.JSONRESPONSE;
-    private JsonResponse jsonResponse = JsonResponse.JACKSON;
-    private ParametersEncoding parametersEncoding;
+    private ParametersEncoding parametersEncoding = ParametersEncoding.PLAINJSON;
     private Map<String, String> requestParameters = new HashMap<String, String>();
     private HttpImplementation httpImplementation = HttpImplementation.OKHTTP;
 
@@ -68,15 +63,6 @@ public class MethodCreator {
         return this;
     }
 
-    public MethodCreator responseParsing(ResponseParsing responseParsing) {
-        this.responseParsing = responseParsing;
-        return this;
-    }
-
-    public MethodCreator jsonResponse(JsonResponse jsonResponse) {
-        this.jsonResponse = jsonResponse;
-        return this;
-    }
 
     public MethodCreator contentBasedAction(String contentBasedActionKey, String contentBasedActionTitle) {
         this.requestParameters.put(contentBasedActionKey, contentBasedActionTitle);
@@ -156,12 +142,16 @@ public class MethodCreator {
                 switch (requestType) {
                     case GET:
                         request.get();
+                        break;
                     case POST:
                         request.post(requestBody);
+                        break;
                     case PUT:
                         request.put(requestBody);
+                        break;
                     case PATCH:
                         request.patch(requestBody);
+                        break;
                 }
                 return okHttpClient.newCall(request.build()).execute();
             }
