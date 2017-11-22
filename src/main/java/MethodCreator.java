@@ -29,9 +29,6 @@ enum RequestType {
     GET, POST, PUT, PATCH
 }
 
-enum Authentication {SESSION, OAUTH}
-
-
 enum ParametersEncoding {FORM, PLAINJSON}
 
 enum HttpImplementation {BASICHTTP, OKHTTP}
@@ -40,11 +37,12 @@ public class MethodCreator {
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
     private String baseUrl;
     private RequestType requestType = RequestType.GET;
-    private Authentication authentication;
-    private String sessionId;
+    private String tokenName;
+    private AuthTokenProvider sessionIdProvider;
     private ParametersEncoding parametersEncoding = ParametersEncoding.PLAINJSON;
-    private Map<String, String> requestParameters = new HashMap<String, String>();
+    private Map<String, String> requestParameters = new HashMap<>();
     private HttpImplementation httpImplementation = HttpImplementation.OKHTTP;
+    private AuthTokenProvider oauthTokenProvider;
 
 
     public MethodCreator baseUrl(String baseUrl) {
@@ -57,9 +55,9 @@ public class MethodCreator {
         return this;
     }
 
-    public MethodCreator authentication(Authentication authentication, String sessionId) {
-        this.authentication = authentication;
-        this.sessionId = sessionId;
+    public MethodCreator sessionAuth(String tokenName, AuthTokenProvider sessionId) {
+        this.tokenName = tokenName;
+        this.sessionIdProvider = sessionId;
         return this;
     }
 
@@ -90,71 +88,87 @@ public class MethodCreator {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             DocumentBuilder builder;
             builder = factory.newDocumentBuilder();
-            if (response.body() == null){
+            if (response.body() == null) {
                 throw new EmptyBodyException();
-            }else{
+            } else {
                 return builder.parse(new InputSource(new StringReader(response.body().string())));
             }
         });
     }
 
-    public <T> Observable<T> buildJson(Class <T> responseClass, ResponseParser responseParser) {
+    public <T> Observable<T> buildJson(Class<T> responseClass, ResponseParser responseParser) {
         return buildRaw().map(response -> {
-            if (response.body() == null){
+            if (response.body() == null) {
                 throw new EmptyBodyException();
-            }else{
+            } else {
                 return responseParser.parse(response.body().string(), responseClass);
             }
         });
     }
 
     public Observable<Response> buildRaw() {
-        return Observable.fromCallable(new Callable<Response>() {
-            public Response call() throws Exception {
-                OkHttpClient okHttpClient = new OkHttpClient();
-                Request.Builder request = new Request.Builder();
-                RequestBody requestBody = null;
-
-                if (requestType == RequestType.GET) {
-                    HttpUrl.Builder httpBuider = HttpUrl.parse(baseUrl).newBuilder();
-                    if (requestParameters != null) {
-                        for (Map.Entry<String, String> param : requestParameters.entrySet()) {
-                            httpBuider.addQueryParameter(param.getKey(), param.getValue());
+        return Observable.fromCallable(() -> {
+            OkHttpClient.Builder okHttpClientBuilder = new OkHttpClient.Builder();
+            if (oauthTokenProvider != null) {
+                okHttpClientBuilder.authenticator(new Authenticator() {
+                    @Override
+                    public Request authenticate(Route route, Response response) throws IOException {
+                        if (response.request().header("Authorization") != null) {
+                            return null;
                         }
+                        return response.request().newBuilder()
+                                .header("Authorization", String.format("Bearer %s", oauthTokenProvider.getToken()))
+                                .build();
                     }
-                    request.url(httpBuider.build());
-
-                } else if (parametersEncoding == ParametersEncoding.PLAINJSON) {
-                    request.url(baseUrl);
-                    Gson gson = new Gson();
-                    String json = gson.toJson(requestParameters);
-                    requestBody = RequestBody.create(JSON, json);
-                } else {
-                    request.url(baseUrl);
-                    FormBody.Builder requestBodyBuilder = new FormBody.Builder();
-                    for (Map.Entry<String, String> e : requestParameters.entrySet()) {
-                        String key = e.getKey();
-                        String value = e.getValue();
-                        requestBodyBuilder.add(key, value);
-                    }
-                    requestBody = requestBodyBuilder.build();
-                }
-                switch (requestType) {
-                    case GET:
-                        request.get();
-                        break;
-                    case POST:
-                        request.post(requestBody);
-                        break;
-                    case PUT:
-                        request.put(requestBody);
-                        break;
-                    case PATCH:
-                        request.patch(requestBody);
-                        break;
-                }
-                return okHttpClient.newCall(request.build()).execute();
+                });
             }
+
+            OkHttpClient okHttpClient = okHttpClientBuilder.build();
+            Request.Builder request = new Request.Builder();
+            RequestBody requestBody = null;
+            Map<String, String> requestParameters = new HashMap<>(this.requestParameters);
+            if (sessionIdProvider != null && tokenName != null) {
+                requestParameters.put(tokenName, sessionIdProvider.getToken());
+            }
+            if (requestType == RequestType.GET) {
+                HttpUrl.Builder httpBuider = HttpUrl.parse(baseUrl).newBuilder();
+                if (requestParameters != null) {
+                    for (Map.Entry<String, String> param : requestParameters.entrySet()) {
+                        httpBuider.addQueryParameter(param.getKey(), param.getValue());
+                    }
+                }
+                request.url(httpBuider.build());
+
+            } else if (parametersEncoding == ParametersEncoding.PLAINJSON) {
+                request.url(baseUrl);
+                Gson gson = new Gson();
+                String json = gson.toJson(requestParameters);
+                requestBody = RequestBody.create(JSON, json);
+            } else {
+                request.url(baseUrl);
+                FormBody.Builder requestBodyBuilder = new FormBody.Builder();
+                for (Map.Entry<String, String> e : requestParameters.entrySet()) {
+                    String key = e.getKey();
+                    String value = e.getValue();
+                    requestBodyBuilder.add(key, value);
+                }
+                requestBody = requestBodyBuilder.build();
+            }
+            switch (requestType) {
+                case GET:
+                    request.get();
+                    break;
+                case POST:
+                    request.post(requestBody);
+                    break;
+                case PUT:
+                    request.put(requestBody);
+                    break;
+                case PATCH:
+                    request.patch(requestBody);
+                    break;
+            }
+            return okHttpClient.newCall(request.build()).execute();
         });
     }
 }

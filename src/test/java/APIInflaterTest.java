@@ -39,7 +39,7 @@ public class APIInflaterTest {
     }
 
     @Test
-    public void testPOstRaw() throws Exception {
+    public void testPostRaw() throws Exception {
         Observable<Response> apiMethod = new MethodCreator()
                 .baseUrl("https://jsonplaceholder.typicode.com/posts")
                 .requestType(RequestType.POST)
