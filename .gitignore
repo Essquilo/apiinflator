@@ -2,3 +2,6 @@
 *.iml
 /.clover
 */target
+*.project
+*.classpath
+*.settings

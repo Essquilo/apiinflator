@@ -35,5 +35,4 @@ public interface GithubAPI {
     @Form
     @PUT
     public Observable<Document> addRepo(@Path("user") String user, @Param("number") Integer number, @Param("string") String string);
-
 }
