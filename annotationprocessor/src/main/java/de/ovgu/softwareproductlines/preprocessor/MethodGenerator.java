@@ -1,18 +1,23 @@
 package de.ovgu.softwareproductlines.preprocessor;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.gson.Gson;
 import com.squareup.javapoet.*;
-import de.ovgu.softwareproductlines.annotation.*;
+import de.ovgu.softwareproductlines.annotation.EmptyBodyException;
+import de.ovgu.softwareproductlines.annotation.Url;
 import de.ovgu.softwareproductlines.annotation.auth.AuthToken;
 import de.ovgu.softwareproductlines.annotation.auth.OAuth;
-import de.ovgu.softwareproductlines.annotation.response.Jackson;
+import de.ovgu.softwareproductlines.annotation.params.FormBody;
+import de.ovgu.softwareproductlines.annotation.params.JSONBody;
+import de.ovgu.softwareproductlines.annotation.params.Param;
+import de.ovgu.softwareproductlines.annotation.params.Path;
 import de.ovgu.softwareproductlines.annotation.type.GET;
 import de.ovgu.softwareproductlines.annotation.type.PATCH;
 import de.ovgu.softwareproductlines.annotation.type.POST;
 import de.ovgu.softwareproductlines.annotation.type.PUT;
 import io.reactivex.Observable;
-import okhttp3.*;
+import okhttp3.MediaType;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.w3c.dom.Document;
 
 import javax.annotation.processing.ProcessingEnvironment;
@@ -32,14 +37,13 @@ import java.util.stream.Collectors;
 
 public class MethodGenerator {
     private ExecutableElement method;
-    private ProcessingEnvironment proccessingEnv;
     private Types typeUtils;
     private Elements elemUtils;
-    String url;
+    private String url;
 
     public MethodGenerator(ExecutableElement method, ProcessingEnvironment proccessingEnv) {
         this.method = method;
-        this.proccessingEnv = proccessingEnv;
+        ProcessingEnvironment proccessingEnv1 = proccessingEnv;
         typeUtils = proccessingEnv.getTypeUtils();
         elemUtils = proccessingEnv.getElementUtils();
     }
@@ -68,14 +72,14 @@ public class MethodGenerator {
         TypeSpec.Builder callable = TypeSpec.anonymousClassBuilder("")
                 .addSuperinterface(ParameterizedTypeName.get(ClassName.get(Callable.class), TypeName.get(modelType)));
 
-        if ((method.getAnnotation(Form.class) != null || method.getAnnotation(JSON.class) != null)
+        if ((method.getAnnotation(FormBody.class) != null || method.getAnnotation(JSONBody.class) != null)
                 && method.getAnnotation(GET.class) != null) {
             throw new IllegalArgumentException("Method " + call.toString() + ": GET requests can't have body.");
         }
 
         if (method.getAnnotation(GET.class) == null) {
             call.addStatement("$T requestBody", RequestBody.class);
-            if (method.getAnnotation(Form.class) != null) {
+            if (method.getAnnotation(FormBody.class) != null) {
                 call.addCode(buildFormBody());
             } else {
                 call.addCode(buildJsonBody());
@@ -103,23 +107,13 @@ public class MethodGenerator {
                     .addStatement("$T builder = $T.newInstance().newDocumentBuilder()", DocumentBuilder.class, DocumentBuilderFactory.class)
                     .addStatement("return builder.parse(response.body().source().inputStream())")
                     .endControlFlow();
-        } else if (method.getAnnotation(Jackson.class) != null) {
-            call.addStatement("$T response = OKHTTP_CLIENT.newCall(requestBuilder.build()).execute()", Response.class)
-                    .beginControlFlow("if (response.body() == null)")
-                    .addStatement("throw new $T($S)", EmptyBodyException.class, method.getSimpleName())
-                    .endControlFlow()
-                    .beginControlFlow("else")
-                    .addStatement("$T jsonMapper = new $T()", ObjectMapper.class, ObjectMapper.class)
-                    .addStatement("return jsonMapper.readValue(response.body().string(), $L.class)", modelType)
-                    .endControlFlow();
         } else {
             call.addStatement("$T response = OKHTTP_CLIENT.newCall(requestBuilder.build()).execute()", Response.class)
                     .beginControlFlow("if (response.body() == null)")
                     .addStatement("throw new $T($S)", EmptyBodyException.class, method.getSimpleName())
                     .endControlFlow()
                     .beginControlFlow("else")
-                    .addStatement("$T jsonMapper = new $T()", Gson.class, Gson.class)
-                    .addStatement("return jsonMapper.fromJson(response.body().string(), $L.class)", modelType)
+                    .addStatement("return adapter.adapt(response.body().string(), $L.class)", modelType)
                     .endControlFlow();
         }
 
@@ -158,7 +152,7 @@ public class MethodGenerator {
 
     private CodeBlock buildFormBody() {
         CodeBlock.Builder builder = CodeBlock.builder();
-        builder.addStatement("$T requestBodyBuilder = new $T()", FormBody.Builder.class, FormBody.Builder.class);
+        builder.addStatement("$T requestBodyBuilder = new $T()", okhttp3.FormBody.Builder.class, okhttp3.FormBody.Builder.class);
         for (VariableElement variableElem : method.getParameters()) {
             Param bodyParam = variableElem.getAnnotation(Param.class);
             if (bodyParam != null) {
@@ -195,5 +189,11 @@ public class MethodGenerator {
 
     public boolean needsAuth() {
         return method.getAnnotation(OAuth.class) != null;
+    }
+
+    public boolean needsJsonParsing() {
+        TypeMirror modelType = ((DeclaredType) method.getReturnType()).getTypeArguments().get(0);
+        return !typeUtils.isAssignable(modelType, elemUtils.getTypeElement(Response.class.getCanonicalName()).asType())
+                && !typeUtils.isAssignable(modelType, elemUtils.getTypeElement(Document.class.getCanonicalName()).asType());
     }
 }

@@ -1,4 +1,4 @@
-package de.ovgu.softwareproductlines.annotation.auth;
+package de.ovgu.softwareproductlines.annotation.json;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -6,6 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.SOURCE)
-@Target(ElementType.METHOD)
-public @interface OAuth {
+@Target(ElementType.TYPE)
+public @interface ParseWith {
+    Class<? extends JsonAdapterFactory> value();
 }

@@ -3,7 +3,12 @@ package de.ovgu.softwareproductlines;
 import de.ovgu.softwareproductlines.annotation.*;
 import de.ovgu.softwareproductlines.annotation.auth.AuthToken;
 import de.ovgu.softwareproductlines.annotation.auth.OAuth;
-import de.ovgu.softwareproductlines.annotation.response.Jackson;
+import de.ovgu.softwareproductlines.annotation.json.JacksonAdapterFactory;
+import de.ovgu.softwareproductlines.annotation.json.ParseWith;
+import de.ovgu.softwareproductlines.annotation.params.FormBody;
+import de.ovgu.softwareproductlines.annotation.params.JSONBody;
+import de.ovgu.softwareproductlines.annotation.params.Param;
+import de.ovgu.softwareproductlines.annotation.params.Path;
 import de.ovgu.softwareproductlines.annotation.type.GET;
 import de.ovgu.softwareproductlines.annotation.type.PATCH;
 import de.ovgu.softwareproductlines.annotation.type.PUT;
@@ -11,9 +16,8 @@ import io.reactivex.Observable;
 import okhttp3.Response;
 import org.w3c.dom.Document;
 
-import java.util.List;
-
 @API("www.github.com")
+@ParseWith(PrettyJacksonAdapterFactory.class)
 public interface GithubAPI {
     @Url("/users/{user}/repos")
     @GET
@@ -26,13 +30,12 @@ public interface GithubAPI {
 
     @Url("/users/{user}/repos/settings")
     @PATCH
-    @JSON
+    @JSONBody
     @OAuth
     public Observable<SettingsResponse> patchSettings(@Path("user") String user, @AuthToken String token);
 
     @Url("/users/{user}/repos/add")
-    @Jackson
-    @Form
+    @FormBody
     @PUT
     public Observable<Document> addRepo(@Path("user") String user, @Param("number") Integer number, @Param("string") String string);
 }
