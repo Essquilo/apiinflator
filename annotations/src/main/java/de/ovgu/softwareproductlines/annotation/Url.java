@@ -1,11 +1,9 @@
 package de.ovgu.softwareproductlines.annotation;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.*;
 
-@Retention(RetentionPolicy.SOURCE)
+@Retention(RetentionPolicy.RUNTIME)
+@Inherited
 @Target(ElementType.METHOD)
 public @interface Url {
     String value();
